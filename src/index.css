@@ -10,7 +10,7 @@
 body {
   margin: 0;
   padding: 0;
-  @apply bg-brand-dark text-brand-blue font-sans overflow-hidden;
+  @apply bg-brand-dark text-brand-blue font-sans;
 }
 
 h1,

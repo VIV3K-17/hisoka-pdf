@@ -56,7 +56,7 @@ export const Layout = ({ children }) => {
             <motion.main
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex-1 w-full h-[calc(100vh-64px)] overflow-hidden relative"
+                className="flex-1 w-full h-[calc(100vh-64px)] overflow-y-auto relative"
             >
                 {children}
             </motion.main>

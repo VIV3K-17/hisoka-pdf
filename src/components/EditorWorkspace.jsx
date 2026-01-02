@@ -28,6 +28,7 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
     const [activeTool, setActiveTool] = useState('style'); // style, edit, ai
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
+    const [isBottomDrawerOpen, setIsBottomDrawerOpen] = useState(false);
 
     // Right Sidebar Tools
     const [rightActiveTool, setRightActiveTool] = useState(null);
@@ -395,7 +396,7 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
             <div className="flex-1 flex flex-col h-full overflow-hidden relative">
 
                 {/* Top Bar inside Workspace */}
-                <div className="h-14 border-b border-brand-blue/10 flex justify-between items-center px-6 bg-brand-dark/50">
+                <div className="h-14 border-b border-brand-blue/10 flex justify-between items-center px-6 bg-brand-dark/50 shrink-0">
                     <div className="flex items-center gap-2 opacity-70">
                         <ImageIcon size={16} />
                         <span className="text-sm font-medium">{file.name}</span>
@@ -406,11 +407,11 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
                 </div>
 
                 {/* Center: Active Page Preview */}
-                <div className="flex-1 bg-brand-dark/50 relative overflow-hidden flex items-center justify-center p-8">
+                <div className="flex-1 bg-brand-dark/50 relative overflow-hidden flex flex-col items-center justify-center p-8 min-h-0">
                     {/* Background Grid Pattern */}
-                    <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(#ceeffe 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
+                    <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#ceeffe 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
 
-                    <div className="relative z-10 w-full h-full flex items-center justify-center">
+                    <div className="relative z-10 w-full flex items-center justify-center">
                         <PDFViewer
                             file={renderedFileUrl || file}
                             pdfDoc={pdfDoc}
@@ -423,24 +424,43 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
                     </div>
                 </div>
 
-                {/* Bottom: Thumbnail Strip */}
-                <div className="h-48 border-t border-brand-blue/10 bg-brand-dark/80 backdrop-blur-md flex flex-col">
-                    <div className="px-4 py-2 border-b border-brand-blue/5 flex justify-between items-center">
-                        <span className="text-xs font-bold text-brand-blue/50 uppercase tracking-widest flex items-center gap-2">
-                            <LayoutIcon size={12} /> Pages Gallery
-                        </span>
+                {/* Bottom: Collapsible Thumbnail Drawer */}
+                <div
+                    className="absolute bottom-20 left-0 right-0 z-40 group/drawer px-10"
+                    onMouseEnter={() => setIsBottomDrawerOpen(true)}
+                    onMouseLeave={() => setIsBottomDrawerOpen(false)}
+                >
+                    {/* Hover Trigger Handle */}
+                    <div className="h-6 w-full flex items-center justify-center cursor-ns-resize group-hover/drawer:opacity-0 transition-opacity">
+                        <div className="w-16 h-1 bg-brand-blue/30 rounded-full" />
                     </div>
-                    <div className="flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar p-4 flex items-center gap-4">
-                        <PDFViewer
-                            file={renderedFileUrl || file}
-                            pdfDoc={pdfDoc}
-                            setPdfDoc={setPdfDoc}
-                            activePage={activePage}
-                            pageCount={pdfDoc?.getPageCount()}
-                            viewMode="thumbnail"
-                            onPageClick={(page) => setActivePage(page)}
-                        />
-                    </div>
+
+                    <motion.div
+                        initial={{ y: "calc(100% - 24px)" }}
+                        animate={{ y: isBottomDrawerOpen ? 0 : "calc(100% - 24px)" }}
+                        transition={{ type: "spring", damping: 20, stiffness: 100 }}
+                        className="h-40 border border-brand-blue/10 bg-brand-dark/95 backdrop-blur-2xl flex flex-col shadow-[0_40px_100px_rgba(0,0,0,0.8)] rounded-3xl overflow-hidden max-w-5xl mx-auto"
+                    >
+                        <div className="px-4 py-2 border-b border-brand-blue/5 flex justify-between items-center">
+                            <span className="text-xs font-bold text-brand-blue/50 uppercase tracking-widest flex items-center gap-2">
+                                <LayoutIcon size={12} /> Pages Gallery
+                            </span>
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-brand-blue/40">Hover to reveal</span>
+                            </div>
+                        </div>
+                        <div className="flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar p-4 flex items-center gap-4">
+                            <PDFViewer
+                                file={renderedFileUrl || file}
+                                pdfDoc={pdfDoc}
+                                setPdfDoc={setPdfDoc}
+                                activePage={activePage}
+                                pageCount={pdfDoc?.getPageCount()}
+                                viewMode="thumbnail"
+                                onPageClick={(page) => setActivePage(page)}
+                            />
+                        </div>
+                    </motion.div>
                 </div>
 
             </div>
