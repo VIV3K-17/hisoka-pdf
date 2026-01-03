@@ -396,7 +396,7 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
             <div className="flex-1 flex flex-col h-full overflow-hidden relative">
 
                 {/* Top Bar inside Workspace */}
-                <div className="h-14 border-b border-brand-blue/10 flex justify-between items-center px-6 bg-brand-dark/50 shrink-0">
+                <div className="h-10 border-b border-brand-blue/10 flex justify-between items-center px-6 bg-brand-dark/50 shrink-0">
                     <div className="flex items-center gap-2 opacity-70">
                         <ImageIcon size={16} />
                         <span className="text-sm font-medium">{file.name}</span>
@@ -407,11 +407,11 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
                 </div>
 
                 {/* Center: Active Page Preview */}
-                <div className="flex-1 bg-brand-dark/50 relative overflow-hidden flex flex-col items-center justify-center p-8 min-h-0">
+                <div className="flex-1 bg-brand-dark/50 relative overflow-hidden flex flex-col items-center justify-center p-3 min-h-0">
                     {/* Background Grid Pattern */}
                     <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#ceeffe 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
 
-                    <div className="relative z-10 w-full flex items-center justify-center">
+                    <div className="relative z-10 w-full h-full flex items-center justify-center">
                         <PDFViewer
                             file={renderedFileUrl || file}
                             pdfDoc={pdfDoc}
@@ -426,20 +426,20 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
 
                 {/* Bottom: Collapsible Thumbnail Drawer */}
                 <div
-                    className="absolute bottom-20 left-0 right-0 z-40 group/drawer px-10"
+                    className="absolute bottom-6 left-0 right-0 z-40 group/drawer px-10"
                     onMouseEnter={() => setIsBottomDrawerOpen(true)}
                     onMouseLeave={() => setIsBottomDrawerOpen(false)}
                 >
                     {/* Hover Trigger Handle */}
-                    <div className="h-6 w-full flex items-center justify-center cursor-ns-resize group-hover/drawer:opacity-0 transition-opacity">
+                    <div className="h-4 w-full flex items-center justify-center cursor-ns-resize group-hover/drawer:opacity-0 transition-opacity">
                         <div className="w-16 h-1 bg-brand-blue/30 rounded-full" />
                     </div>
 
                     <motion.div
-                        initial={{ y: "calc(100% - 24px)" }}
-                        animate={{ y: isBottomDrawerOpen ? 0 : "calc(100% - 24px)" }}
+                        initial={{ y: "calc(100% - 16px)" }}
+                        animate={{ y: isBottomDrawerOpen ? 0 : "calc(100% - 16px)" }}
                         transition={{ type: "spring", damping: 20, stiffness: 100 }}
-                        className="h-40 border border-brand-blue/10 bg-brand-dark/95 backdrop-blur-2xl flex flex-col shadow-[0_40px_100px_rgba(0,0,0,0.8)] rounded-3xl overflow-hidden max-w-5xl mx-auto"
+                        className="h-32 border border-brand-blue/10 bg-brand-dark/95 backdrop-blur-2xl flex flex-col shadow-[0_40px_100px_rgba(0,0,0,0.8)] rounded-3xl overflow-hidden max-w-5xl mx-auto"
                     >
                         <div className="px-4 py-2 border-b border-brand-blue/5 flex justify-between items-center">
                             <span className="text-xs font-bold text-brand-blue/50 uppercase tracking-widest flex items-center gap-2">

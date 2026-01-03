@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { RotateCw, Trash2 } from 'lucide-react';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
@@ -9,7 +9,7 @@ import { ConfirmationModal } from '../../components/ConfirmationModal';
 // Set worker source
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
-export const PDFViewer = ({
+export const PDFViewer = React.memo(({
     file,
     onCanvasReady,
     pdfDoc,
@@ -22,6 +22,7 @@ export const PDFViewer = ({
     const [numPagesState, setNumPages] = useState(null);
     const [pageRotations, setPageRotations] = useState({});
     const thumbnailRefs = useRef({});
+    const [renderedThumbnails, setRenderedThumbnails] = useState(new Set()); // Track which thumbnails have rendered
 
     // Modal State
     const [deleteModal, setDeleteModal] = useState({ isOpen: false, pageIndex: null });
@@ -51,7 +52,7 @@ export const PDFViewer = ({
         }
     }
 
-    const handleRotate = (pageIndex) => {
+    const handleRotate = useCallback((pageIndex) => {
         if (pdfDoc) {
             PDFEditor.rotatePage(pdfDoc, pageIndex, 90);
             setPageRotations(prev => ({
@@ -59,13 +60,13 @@ export const PDFViewer = ({
                 [pageIndex]: ((prev[pageIndex] || 0) + 90) % 360
             }));
         }
-    };
+    }, [pdfDoc]);
 
-    const handleDeleteClick = (pageIndex) => {
+    const handleDeleteClick = useCallback((pageIndex) => {
         if (pdfDoc && numPages > 1) {
             setDeleteModal({ isOpen: true, pageIndex });
         }
-    };
+    }, [pdfDoc, numPages]);
 
     const confirmDelete = async () => {
         const { pageIndex } = deleteModal;
@@ -80,30 +81,57 @@ export const PDFViewer = ({
         setDeleteModal({ isOpen: false, pageIndex: null });
     };
 
-    // Memoized Thumbnail Item
-    const ThumbnailItem = React.memo(({ pageNumber, isActive, rotation, onClick, setRef }) => (
+    // Memoized Thumbnail Item - only re-renders if pageNumber or rotation changes
+    const ThumbnailItem = React.memo(({ pageNumber, rotation, onClick, setRef, isActive }) => (
         <div
             ref={setRef}
             className={`relative cursor-pointer transition-all duration-200 flex-shrink-0 ${isActive ? 'ring-2 ring-brand-yellow scale-105 z-10' : 'opacity-60 hover:opacity-100 hover:scale-105'}`}
             onClick={onClick}
-            style={{ height: '140px' }}
+            style={{ height: '100px' }}
         >
             <Page
                 pageNumber={pageNumber}
                 renderTextLayer={false}
                 renderAnnotationLayer={false}
-                height={140}
+                height={100}
                 rotate={rotation || 0}
                 className="rounded-md overflow-hidden bg-white w-full h-full object-contain shadow-md"
+                onRenderSuccess={() => {
+                    setRenderedThumbnails(prev => new Set(prev).add(pageNumber));
+                }}
                 loading={
-                    <div className="w-[140px] h-[200px] bg-white/5 animate-pulse rounded-md" />
+                    <div className="w-[100px] h-[140px] bg-white/5 animate-pulse rounded-md" />
                 }
             />
             <div className="absolute bottom-1 right-1 px-1.5 py-0.5 bg-black/60 rounded text-[10px] font-bold text-white backdrop-blur-sm">
                 {pageNumber}
             </div>
         </div>
-    ));
+    ), (prevProps, nextProps) => {
+        // Return true if props are equal (skip re-render), false if different (do re-render)
+        return (
+            prevProps.pageNumber === nextProps.pageNumber &&
+            prevProps.rotation === nextProps.rotation &&
+            prevProps.isActive === nextProps.isActive
+        );
+    });
+
+    // Memoize thumbnail array - only re-create when numPages or pageRotations change, NOT when activePage changes
+    const thumbnailItems = useMemo(() => {
+        if (viewMode === 'thumbnail' && numPages) {
+            return Array.from(new Array(numPages), (el, index) => (
+                <ThumbnailItem
+                    key={`thumb_${index + 1}`}
+                    pageNumber={index + 1}
+                    isActive={activePage === index + 1}
+                    rotation={pageRotations[index]}
+                    onClick={() => onPageClick && onPageClick(index + 1)}
+                    setRef={el => thumbnailRefs.current[index + 1] = el}
+                />
+            ));
+        }
+        return null;
+    }, [numPages, pageRotations, viewMode, onPageClick]);
 
     return (
         <>
@@ -166,16 +194,7 @@ export const PDFViewer = ({
                         </div>
                     )}
 
-                    {viewMode === 'thumbnail' && numPages && Array.from(new Array(numPages), (el, index) => (
-                        <ThumbnailItem
-                            key={`thumb_${index + 1}`}
-                            pageNumber={index + 1}
-                            isActive={activePage === index + 1}
-                            rotation={pageRotations[index]}
-                            onClick={() => onPageClick && onPageClick(index + 1)}
-                            setRef={el => thumbnailRefs.current[index + 1] = el}
-                        />
-                    ))}
+                    {viewMode === 'thumbnail' && numPages && thumbnailItems}
 
                     {viewMode === 'list' && Array.from(new Array(numPages), (el, index) => (
                         <div key={`page_${index + 1}`} className="shadow-2xl relative group">
@@ -194,4 +213,12 @@ export const PDFViewer = ({
             </div>
         </>
     );
-};
+}, (prevProps, nextProps) => {
+    // Only re-render when file, viewMode, or pdfDoc changes - NOT when activePage changes for thumbnail mode
+    return (
+        prevProps.file === nextProps.file &&
+        prevProps.viewMode === nextProps.viewMode &&
+        prevProps.pdfDoc === nextProps.pdfDoc &&
+        (nextProps.viewMode !== 'single' || prevProps.activePage === nextProps.activePage)
+    );
+});
