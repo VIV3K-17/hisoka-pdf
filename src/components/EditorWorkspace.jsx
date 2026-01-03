@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { pdfjs } from 'react-pdf';
 import {
@@ -40,6 +40,16 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
     const [renderedFileUrl, setRenderedFileUrl] = useState(null);
 
     const currentCanvasRef = useRef(null);
+    const thumbnailContainerRef = useRef(null);
+
+    const navigatePage = (direction) => {
+        const pageCount = pdfDoc?.getPageCount() || 0;
+        if (direction === 'prev') {
+            setActivePage(prev => Math.max(1, prev - 1));
+        } else {
+            setActivePage(prev => Math.min(pageCount, prev + 1));
+        }
+    };
 
     // Sync PDF changes to view
     useEffect(() => {
@@ -243,6 +253,10 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
         { id: 'ai', icon: Sparkles, label: 'AI Magic' },
     ];
 
+    const handlePageClick = useCallback((page) => {
+        setActivePage(page);
+    }, []);
+
     return (
         <div className="flex h-full w-full overflow-hidden bg-brand-dark text-brand-blue">
             {/* Left Sidebar - Tools */}
@@ -396,7 +410,7 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
             <div className="flex-1 flex flex-col h-full overflow-hidden relative">
 
                 {/* Top Bar inside Workspace */}
-                <div className="h-10 border-b border-brand-blue/10 flex justify-between items-center px-6 bg-brand-dark/50 shrink-0">
+                <div className="h-8 border-b border-brand-blue/10 flex justify-between items-center px-6 bg-brand-dark/50 shrink-0">
                     <div className="flex items-center gap-2 opacity-70">
                         <ImageIcon size={16} />
                         <span className="text-sm font-medium">{file.name}</span>
@@ -407,7 +421,7 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
                 </div>
 
                 {/* Center: Active Page Preview */}
-                <div className="flex-1 bg-brand-dark/50 relative overflow-hidden flex flex-col items-center justify-center p-3 min-h-0">
+                <div className="flex-1 bg-brand-dark/50 relative overflow-hidden flex flex-col items-center justify-center p-0 min-h-0">
                     {/* Background Grid Pattern */}
                     <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#ceeffe 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
 
@@ -439,9 +453,9 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
                         initial={{ y: "calc(100% - 16px)" }}
                         animate={{ y: isBottomDrawerOpen ? 0 : "calc(100% - 16px)" }}
                         transition={{ type: "spring", damping: 20, stiffness: 100 }}
-                        className="h-32 border border-brand-blue/10 bg-brand-dark/95 backdrop-blur-2xl flex flex-col shadow-[0_40px_100px_rgba(0,0,0,0.8)] rounded-3xl overflow-hidden max-w-5xl mx-auto"
+                        className="h-40 border border-brand-blue/10 bg-brand-dark/95 backdrop-blur-2xl flex flex-col shadow-[0_40px_100px_rgba(0,0,0,0.8)] rounded-3xl overflow-hidden max-w-5xl mx-auto"
                     >
-                        <div className="px-4 py-2 border-b border-brand-blue/5 flex justify-between items-center">
+                        <div className="px-4 py-2 border-b border-brand-blue/5 flex justify-between items-center shrink-0">
                             <span className="text-xs font-bold text-brand-blue/50 uppercase tracking-widest flex items-center gap-2">
                                 <LayoutIcon size={12} /> Pages Gallery
                             </span>
@@ -449,16 +463,43 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
                                 <span className="text-[10px] text-brand-blue/40">Hover to reveal</span>
                             </div>
                         </div>
-                        <div className="flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar p-4 flex items-center gap-4">
-                            <PDFViewer
-                                file={renderedFileUrl || file}
-                                pdfDoc={pdfDoc}
-                                setPdfDoc={setPdfDoc}
-                                activePage={activePage}
-                                pageCount={pdfDoc?.getPageCount()}
-                                viewMode="thumbnail"
-                                onPageClick={(page) => setActivePage(page)}
-                            />
+                        
+                        <div className="flex-1 relative flex items-center group/nav overflow-hidden">
+                            {/* Navigation Buttons */}
+                            <div className="absolute left-0 inset-y-0 flex items-center z-50 pl-2">
+                                <button
+                                    onClick={() => navigatePage('prev')}
+                                    disabled={activePage === 1}
+                                    className="p-2 bg-brand-dark/90 border border-white/10 rounded-full text-white/40 hover:text-white hover:bg-brand-red hover:border-brand-red transition-all shadow-xl backdrop-blur-md opacity-0 group-hover/nav:opacity-100 translate-x-[-10px] group-hover/nav:translate-x-0 disabled:hidden"
+                                >
+                                    <ChevronLeft size={20} />
+                                </button>
+                            </div>
+
+                            <div 
+                                ref={thumbnailContainerRef}
+                                className="flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar px-8 py-4 flex items-center gap-4 scroll-smooth h-full"
+                            >
+                                <PDFViewer
+                                    file={renderedFileUrl || file}
+                                    pdfDoc={pdfDoc}
+                                    setPdfDoc={setPdfDoc}
+                                    activePage={activePage}
+                                    pageCount={pdfDoc?.getPageCount()}
+                                    viewMode="thumbnail"
+                                    onPageClick={handlePageClick}
+                                />
+                            </div>
+
+                            <div className="absolute right-0 inset-y-0 flex items-center z-50 pr-2">
+                                <button
+                                    onClick={() => navigatePage('next')}
+                                    disabled={activePage === (pdfDoc?.getPageCount() || 0)}
+                                    className="p-2 bg-brand-dark/90 border border-white/10 rounded-full text-white/40 hover:text-white hover:bg-brand-red hover:border-brand-red transition-all shadow-xl backdrop-blur-md opacity-0 group-hover/nav:opacity-100 translate-x-[10px] group-hover/nav:translate-x-0 disabled:hidden"
+                                >
+                                    <ChevronRight size={20} />
+                                </button>
+                            </div>
                         </div>
                     </motion.div>
                 </div>

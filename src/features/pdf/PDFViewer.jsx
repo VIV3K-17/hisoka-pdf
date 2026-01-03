@@ -82,48 +82,54 @@ export const PDFViewer = React.memo(({
     };
 
     // Memoized Thumbnail Item - only re-renders if pageNumber or rotation changes
-    const ThumbnailItem = React.memo(({ pageNumber, rotation, onClick, setRef, isActive }) => (
-        <div
-            ref={setRef}
-            className={`relative cursor-pointer transition-all duration-200 flex-shrink-0 ${isActive ? 'ring-2 ring-brand-yellow scale-105 z-10' : 'opacity-60 hover:opacity-100 hover:scale-105'}`}
-            onClick={onClick}
-            style={{ height: '100px' }}
-        >
-            <Page
-                pageNumber={pageNumber}
-                renderTextLayer={false}
-                renderAnnotationLayer={false}
-                height={100}
-                rotate={rotation || 0}
-                className="rounded-md overflow-hidden bg-white w-full h-full object-contain shadow-md"
-                onRenderSuccess={() => {
-                    setRenderedThumbnails(prev => new Set(prev).add(pageNumber));
-                }}
-                loading={
-                    <div className="w-[100px] h-[140px] bg-white/5 animate-pulse rounded-md" />
-                }
-            />
-            <div className="absolute bottom-1 right-1 px-1.5 py-0.5 bg-black/60 rounded text-[10px] font-bold text-white backdrop-blur-sm">
-                {pageNumber}
+    const ThumbnailItem = React.memo(
+        ({ pageNumber, rotation, onClick, setRef }) => (
+            <div
+                ref={setRef}
+                data-page-number={pageNumber}
+                className="thumbnail-item relative cursor-pointer transition-all duration-200 flex-shrink-0 opacity-60 hover:opacity-100 hover:scale-105"
+                onClick={onClick}
+                style={{ height: '100px' }}
+            >
+                {/* Neon Glow Effect - controlled by CSS */}
+                <div className="highlight-overlay absolute inset-0 rounded-md ring-2 ring-brand-red shadow-[0_0_20px_rgba(206,10,58,0.6),0_0_40px_rgba(206,10,58,0.4),inset_0_0_20px_rgba(206,10,58,0.1)] pointer-events-none z-20 opacity-0 transition-opacity" />
+                
+                <Page
+                    pageNumber={pageNumber}
+                    renderTextLayer={false}
+                    renderAnnotationLayer={false}
+                    height={100}
+                    rotate={rotation || 0}
+                    className="rounded-md overflow-hidden bg-white w-full h-full object-contain shadow-md"
+                    onRenderSuccess={() => {
+                        setRenderedThumbnails(prev => new Set(prev).add(pageNumber));
+                    }}
+                    loading={
+                        <div className="w-[70px] h-[100px] bg-white/5 animate-pulse rounded-md" />
+                    }
+                />
+                <div className="absolute bottom-1 right-1 px-1.5 py-0.5 bg-black/60 rounded text-[10px] font-bold text-white backdrop-blur-sm">
+                    {pageNumber}
+                </div>
             </div>
-        </div>
-    ), (prevProps, nextProps) => {
-        // Return true if props are equal (skip re-render), false if different (do re-render)
-        return (
-            prevProps.pageNumber === nextProps.pageNumber &&
-            prevProps.rotation === nextProps.rotation &&
-            prevProps.isActive === nextProps.isActive
-        );
-    });
+        ),
+        (prevProps, nextProps) => {
+            // Only re-render if pageNumber or rotation changes
+            return (
+                prevProps.pageNumber === nextProps.pageNumber &&
+                prevProps.rotation === nextProps.rotation
+            );
+        }
+    );
 
-    // Memoize thumbnail array - only re-create when numPages or pageRotations change, NOT when activePage changes
+    // Memoize thumbnail array - ONLY re-create when numPages or pageRotations change
+    // This ensures the thumbnails themselves NEVER re-render when activePage changes
     const thumbnailItems = useMemo(() => {
         if (viewMode === 'thumbnail' && numPages) {
             return Array.from(new Array(numPages), (el, index) => (
                 <ThumbnailItem
                     key={`thumb_${index + 1}`}
                     pageNumber={index + 1}
-                    isActive={activePage === index + 1}
                     rotation={pageRotations[index]}
                     onClick={() => onPageClick && onPageClick(index + 1)}
                     setRef={el => thumbnailRefs.current[index + 1] = el}
@@ -133,8 +139,47 @@ export const PDFViewer = React.memo(({
         return null;
     }, [numPages, pageRotations, viewMode, onPageClick]);
 
+    // Memoize the entire thumbnail document to prevent any re-renders when activePage changes
+    const thumbnailDocument = useMemo(() => {
+        if (viewMode !== 'thumbnail') return null;
+        return (
+            <Document
+                file={file}
+                onLoadSuccess={onDocumentLoadSuccess}
+                className="flex gap-4 px-4 thumbnails-container min-w-max"
+                loading={
+                    <div className="flex items-center gap-3 text-brand-blue/50">
+                        <div className="w-5 h-5 border-2 border-brand-red border-t-transparent rounded-full animate-spin" />
+                        Loading PDF...
+                    </div>
+                }
+            >
+                {thumbnailItems}
+            </Document>
+        );
+    }, [file, viewMode, thumbnailItems]);
+
     return (
         <>
+            <style>{`
+                .thumbnails-wrapper[data-active-page="${activePage}"] .thumbnail-item[data-page-number="${activePage}"] {
+                    opacity: 1;
+                    transform: scale(1.05);
+                    z-index: 10;
+                    filter: drop-shadow(0 0 10px rgba(206, 10, 58, 0.8));
+                }
+                .thumbnails-wrapper[data-active-page="${activePage}"] .thumbnail-item[data-page-number="${activePage}"] .highlight-overlay {
+                    opacity: 1;
+                }
+                /* Hide vertical scrollbar but keep horizontal */
+                .custom-scrollbar::-webkit-scrollbar:vertical {
+                    width: 0;
+                    display: none;
+                }
+                .custom-scrollbar {
+                    overflow-y: hidden !important;
+                }
+            `}</style>
             <ConfirmationModal
                 isOpen={deleteModal.isOpen}
                 onClose={() => setDeleteModal({ ...deleteModal, isOpen: false })}
@@ -142,83 +187,90 @@ export const PDFViewer = React.memo(({
                 title="Delete Page"
                 message={`Are you sure you want to delete page ${deleteModal.pageIndex + 1}? This action cannot be undone.`}
             />
-            <div className={`h-full w-full ${viewMode === 'list' ? 'overflow-auto flex justify-center custom-scrollbar' : viewMode === 'single' ? 'overflow-auto flex items-start justify-center custom-scrollbar py-8' : 'flex items-center justify-center'}`}>
-                <Document
-                    file={file}
-                    onLoadSuccess={onDocumentLoadSuccess}
-                    className={viewMode === 'thumbnail' ? "flex gap-4 px-4" : "flex flex-col gap-4"}
-                    loading={
-                        <div className="flex items-center gap-3 text-brand-blue/50">
-                            <div className="w-5 h-5 border-2 border-brand-red border-t-transparent rounded-full animate-spin" />
-                            Loading PDF...
-                        </div>
-                    }
-                >
-                    {viewMode === 'single' && numPages && (
-                        <div className="relative group shadow-2xl shadow-black/50 my-auto h-full flex items-center justify-center bg-white/5 rounded-lg transition-all p-4">
-                            {/* Page Controls Overlay */}
-                            <div className="absolute -right-12 top-0 flex flex-col gap-2 z-20">
-                                <button
-                                    onClick={() => handleRotate(activePage - 1)}
-                                    className="p-2 bg-brand-dark/80 hover:bg-brand-red border border-brand-blue/10 text-brand-blue rounded-lg transition-colors"
-                                    title="Rotate 90°"
-                                >
-                                    <RotateCw size={18} />
-                                </button>
-                                {numPages > 1 && (
-                                    <button
-                                        onClick={() => handleDeleteClick(activePage - 1)}
-                                        className="p-2 bg-brand-dark/80 hover:bg-brand-red border border-brand-blue/10 text-brand-blue rounded-lg transition-colors"
-                                        title="Delete Page"
-                                    >
-                                        <Trash2 size={18} />
-                                    </button>
-                                )}
+            <div 
+                className={`${viewMode === 'thumbnail' ? 'h-fit w-fit min-w-full overflow-y-hidden' : 'h-full w-full'} thumbnails-wrapper ${viewMode === 'list' ? 'overflow-auto flex justify-center custom-scrollbar' : viewMode === 'single' ? 'overflow-auto flex items-start justify-center custom-scrollbar py-8' : 'flex items-center justify-start'}`}
+                data-active-page={activePage}
+            >
+                {viewMode === 'thumbnail' ? (
+                    thumbnailDocument
+                ) : (
+                    <Document
+                        file={file}
+                        onLoadSuccess={onDocumentLoadSuccess}
+                        className="flex flex-col gap-4"
+                        loading={
+                            <div className="flex items-center gap-3 text-brand-blue/50">
+                                <div className="w-5 h-5 border-2 border-brand-red border-t-transparent rounded-full animate-spin" />
+                                Loading PDF...
                             </div>
+                        }
+                    >
+                        {viewMode === 'single' && numPages && (
+                            <div className="relative group my-auto h-full flex items-center justify-center transition-all p-0 shadow-2xl shadow-black/50">
+                                {/* Page Controls Overlay */}
+                                <div className="absolute -right-12 top-0 flex flex-col gap-2 z-20">
+                                    <button
+                                        onClick={() => handleRotate(activePage - 1)}
+                                        className="p-2 bg-brand-dark/80 hover:bg-brand-red border border-brand-blue/10 text-brand-blue rounded-lg transition-colors"
+                                        title="Rotate 90°"
+                                    >
+                                        <RotateCw size={18} />
+                                    </button>
+                                    {numPages > 1 && (
+                                        <button
+                                            onClick={() => handleDeleteClick(activePage - 1)}
+                                            className="p-2 bg-brand-dark/80 hover:bg-brand-red border border-brand-blue/10 text-brand-blue rounded-lg transition-colors"
+                                            title="Delete Page"
+                                        >
+                                            <Trash2 size={18} />
+                                        </button>
+                                    )}
+                                </div>
 
-                            <Page
-                                key={`page_${activePage}`} // Force re-mount for clean transition
-                                pageNumber={activePage}
-                                renderTextLayer={false}
-                                renderAnnotationLayer={false}
-                                scale={0.6} // Even smaller for single view
-                                rotate={pageRotations[activePage - 1] || 0}
-                                onRenderSuccess={onPageRenderSuccess}
-                                className="max-w-full border border-brand-blue/10"
-                                loading={
-                                    <div className="w-[600px] h-[800px] flex items-center justify-center">
-                                        <div className="w-10 h-10 border-4 border-brand-red border-t-transparent rounded-full animate-spin" />
-                                    </div>
-                                }
-                            />
-                        </div>
-                    )}
+                                <div className="bg-white/5 rounded-lg relative">
+                                    <Page
+                                        key={`page_${activePage}`} // Force re-mount for clean transition
+                                        pageNumber={activePage}
+                                        renderTextLayer={false}
+                                        renderAnnotationLayer={false}
+                                        scale={0.75} // Adjusted for optimal balance
+                                        rotate={pageRotations[activePage - 1] || 0}
+                                        onRenderSuccess={onPageRenderSuccess}
+                                        className="max-w-full border border-brand-blue/10"
+                                        loading={
+                                            <div className="w-[600px] h-[800px] flex items-center justify-center">
+                                                <div className="w-10 h-10 border-4 border-brand-red border-t-transparent rounded-full animate-spin" />
+                                            </div>
+                                        }
+                                    />
+                                </div>
+                            </div>
+                        )}
 
-                    {viewMode === 'thumbnail' && numPages && thumbnailItems}
-
-                    {viewMode === 'list' && Array.from(new Array(numPages), (el, index) => (
-                        <div key={`page_${index + 1}`} className="shadow-2xl relative group">
-                            <Page
-                                pageNumber={index + 1}
-                                renderTextLayer={false}
-                                renderAnnotationLayer={false}
-                                scale={1}
-                                rotate={pageRotations[index] || 0}
-                                onRenderSuccess={index + 1 === activePage ? onPageRenderSuccess : undefined}
-                                className="max-w-full"
-                            />
-                        </div>
-                    ))}
-                </Document>
+                        {viewMode === 'list' && Array.from(new Array(numPages), (el, index) => (
+                            <div key={`page_${index + 1}`} className="shadow-2xl relative group">
+                                <Page
+                                    pageNumber={index + 1}
+                                    renderTextLayer={false}
+                                    renderAnnotationLayer={false}
+                                    scale={1}
+                                    rotate={pageRotations[index] || 0}
+                                    onRenderSuccess={index + 1 === activePage ? onPageRenderSuccess : undefined}
+                                    className="max-w-full"
+                                />
+                            </div>
+                        ))}
+                    </Document>
+                )}
             </div>
         </>
     );
 }, (prevProps, nextProps) => {
-    // Only re-render when file, viewMode, or pdfDoc changes - NOT when activePage changes for thumbnail mode
+    // Re-render if file, viewMode, pdfDoc, or activePage changes
     return (
         prevProps.file === nextProps.file &&
         prevProps.viewMode === nextProps.viewMode &&
         prevProps.pdfDoc === nextProps.pdfDoc &&
-        (nextProps.viewMode !== 'single' || prevProps.activePage === nextProps.activePage)
+        prevProps.activePage === nextProps.activePage
     );
 });
