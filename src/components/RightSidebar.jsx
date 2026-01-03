@@ -8,6 +8,8 @@ import {
     Combine,
     Eraser,
     PenTool,
+    Highlighter,
+    Palette,
     ChevronLeft,
     ChevronRight,
     ArrowRightLeft,
@@ -27,8 +29,6 @@ export const RightSidebar = ({
         { id: 'pdf-to-image', icon: FileType, label: 'PDF to Image' },
         { id: 'split', icon: Scissors, label: 'Split PDF' },
         { id: 'merge', icon: Combine, label: 'Merge PDFs' },
-        { id: 'eraser', icon: Eraser, label: 'Eraser' },
-        { id: 'signature', icon: PenTool, label: 'Add Signature' },
     ];
 
     return (

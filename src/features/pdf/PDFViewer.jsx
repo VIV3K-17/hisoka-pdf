@@ -45,10 +45,24 @@ export const PDFViewer = React.memo(({
         setNumPages(numPages);
     }
 
+    const overlayCanvasRef = useRef(null);
+
     function onPageRenderSuccess(page) {
-        if (onCanvasReady && viewMode === 'single') {
-            const canvas = document.querySelector(`.react-pdf__Page__canvas`);
-            if (canvas) onCanvasReady(canvas);
+        if (viewMode === 'single') {
+            const container = document.querySelector('.react-pdf__Page');
+            const pdfCanvas = container?.querySelector('canvas');
+            const overlayCanvas = overlayCanvasRef.current;
+
+            if (pdfCanvas && overlayCanvas) {
+                // Synchronize overlay canvas with PDF canvas display size
+                const rect = pdfCanvas.getBoundingClientRect();
+                overlayCanvas.width = pdfCanvas.width;
+                overlayCanvas.height = pdfCanvas.height;
+                overlayCanvas.style.width = `${rect.width}px`;
+                overlayCanvas.style.height = `${rect.height}px`;
+
+                if (onCanvasReady) onCanvasReady(overlayCanvas);
+            }
         }
     }
 
@@ -59,6 +73,10 @@ export const PDFViewer = React.memo(({
                 ...prev,
                 [pageIndex]: ((prev[pageIndex] || 0) + 90) % 360
             }));
+            // Clear overlay on rotation
+            if (overlayCanvasRef.current) {
+                overlayCanvasRef.current.getContext('2d').clearRect(0, 0, overlayCanvasRef.current.width, overlayCanvasRef.current.height);
+            }
         }
     }, [pdfDoc]);
 
@@ -77,9 +95,15 @@ export const PDFViewer = React.memo(({
             const newDoc = await PDFEditor.loadPDF(new File([blob], file.name));
             setPdfDoc(newDoc);
             setNumPages(newDoc.getPageCount());
+            // Clear overlay
+            if (overlayCanvasRef.current) {
+                overlayCanvasRef.current.getContext('2d').clearRect(0, 0, overlayCanvasRef.current.width, overlayCanvasRef.current.height);
+            }
         }
         setDeleteModal({ isOpen: false, pageIndex: null });
     };
+
+    // ... (Thumbnail logic remains same)
 
     // Memoized Thumbnail Item - only re-renders if pageNumber or rotation changes
     const ThumbnailItem = React.memo(
@@ -93,7 +117,7 @@ export const PDFViewer = React.memo(({
             >
                 {/* Neon Glow Effect - controlled by CSS */}
                 <div className="highlight-overlay absolute inset-0 rounded-md ring-2 ring-brand-red shadow-[0_0_20px_rgba(206,10,58,0.6),0_0_40px_rgba(206,10,58,0.4),inset_0_0_20px_rgba(206,10,58,0.1)] pointer-events-none z-20 opacity-0 transition-opacity" />
-                
+
                 <Page
                     pageNumber={pageNumber}
                     renderTextLayer={false}
@@ -187,7 +211,7 @@ export const PDFViewer = React.memo(({
                 title="Delete Page"
                 message={`Are you sure you want to delete page ${deleteModal.pageIndex + 1}? This action cannot be undone.`}
             />
-            <div 
+            <div
                 className={`${viewMode === 'thumbnail' ? 'h-fit w-fit min-w-full overflow-y-hidden' : 'h-full w-full'} thumbnails-wrapper ${viewMode === 'list' ? 'overflow-auto flex justify-center custom-scrollbar' : viewMode === 'single' ? 'overflow-auto flex items-start justify-center custom-scrollbar py-8' : 'flex items-center justify-start'}`}
                 data-active-page={activePage}
             >
@@ -227,7 +251,7 @@ export const PDFViewer = React.memo(({
                                     )}
                                 </div>
 
-                                <div className="bg-white/5 rounded-lg relative">
+                                <div className="bg-white/5 rounded-lg relative overflow-hidden">
                                     <Page
                                         key={`page_${activePage}`} // Force re-mount for clean transition
                                         pageNumber={activePage}
@@ -242,6 +266,12 @@ export const PDFViewer = React.memo(({
                                                 <div className="w-10 h-10 border-4 border-brand-red border-t-transparent rounded-full animate-spin" />
                                             </div>
                                         }
+                                    />
+                                    {/* Web-only Drawing Overlay Canvas */}
+                                    <canvas
+                                        ref={overlayCanvasRef}
+                                        className="absolute top-0 left-0 pointer-events-auto cursor-crosshair z-10"
+                                        style={{ mixBlendMode: 'normal' }}
                                     />
                                 </div>
                             </div>

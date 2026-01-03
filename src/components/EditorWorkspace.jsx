@@ -6,6 +6,8 @@ import {
     Type,
     PenTool,
     Palette,
+    Eraser,
+    Highlighter,
     Sparkles,
     ChevronLeft,
     ChevronRight,
@@ -13,7 +15,11 @@ import {
     Maximize,
     Grid,
     Layout as LayoutIcon,
-    Image as ImageIcon
+    Image as ImageIcon,
+    Undo2,
+    Redo2,
+    Trash2,
+    Square
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { PDFViewer } from '../features/pdf/PDFViewer';
@@ -25,7 +31,7 @@ import { PDFEditor } from '../features/pdf/PDFEditor';
 import { RightSidebar } from './RightSidebar';
 
 export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
-    const [activeTool, setActiveTool] = useState('style'); // style, edit, ai
+    const [activeTool, setActiveTool] = useState('edit'); // edit, ai
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
     const [isBottomDrawerOpen, setIsBottomDrawerOpen] = useState(false);
@@ -41,6 +47,24 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
 
     const currentCanvasRef = useRef(null);
     const thumbnailContainerRef = useRef(null);
+    const isDrawingRef = useRef(false);
+    const lastPosRef = useRef({ x: 0, y: 0 });
+
+    const [drawColor, setDrawColor] = useState('#ce0a3a'); // brand-red
+    const [markerSize, setMarkerSize] = useState(15);
+    const [eraserSize, setEraserSize] = useState(20);
+    const [whiteoutSize, setWhiteoutSize] = useState(30);
+    const [signatureSize, setSignatureSize] = useState(2);
+    const [currentDrawingTool, setCurrentDrawingTool] = useState(null); // 'marker', 'eraser', 'signature', 'whiteout'
+
+    const [signatureImage, setSignatureImage] = useState(null);
+    const signatureInputRef = useRef(null);
+
+    // History State
+    const [history, setHistory] = useState([]);
+    const [historyStep, setHistoryStep] = useState(-1);
+    const activeStrokeRef = useRef([]);
+    const preStrokeCanvasStateRef = useRef(null);
 
     const navigatePage = (direction) => {
         const pageCount = pdfDoc?.getPageCount() || 0;
@@ -160,13 +184,6 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
 
             case 'pdf-to-image':
                 if (!pdfDoc) return;
-                // Basic implementation: Export each page as PNG
-                // Note: We need to render it. This is complex without a robust background renderer.
-                // For this V1, I will prompt the user that this feature will download pages as images using browser rendering if possible.
-                // Actually, let's use the PDFViewer's canvas capabilities if we can access them, or just alert "Not fully implemented".
-                // But I promised it.
-                // Alternative: Load PDF with pdfjs-dist in main thread and render to canvas.
-                // import { pdfjs } from 'react-pdf'; is already there.
                 exportPdfToImages();
                 break;
 
@@ -214,12 +231,15 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
                 break;
 
             case 'eraser':
+            case 'marker':
             case 'signature':
-                // These are active states for the canvas interaction
-                // setActiveTool can handle them if we map them.
-                // Current activeTool only supports 'style', 'edit', 'ai'.
-                // I will update activeTool to support these new modes.
-                setActiveTool(toolId);
+                setCurrentDrawingTool(toolId === currentDrawingTool ? null : toolId);
+                break;
+
+            case 'color':
+                const colors = ['#ce0a3a', '#000000', '#0000ff', '#00ff00', '#ffff00'];
+                const nextColor = colors[(colors.indexOf(drawColor) + 1) % colors.length];
+                setDrawColor(nextColor);
                 break;
         }
     };
@@ -235,26 +255,314 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
     };
 
     const exportPdfToImages = async () => {
-        // Placeholder for full logic
-        // We can use the existing pdfDoc bytes
-        if (!file) return;
-        alert("Feature coming soon: This requires converting PDF pages to Canvas.");
-        // Note: Implementing robust PDF->Image on client side requires loading pdfjs document 
-        // and rendering each page to a canvas, then toDataURL. 
-        // Due to complexity limit of valid code block in replace, I'll defer this or simplify.
+        if (!pdfDoc || !currentCanvasRef.current) return;
+
+        try {
+            const canvas = currentCanvasRef.current;
+            const dataUrl = canvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.download = `page_${activePage}.png`;
+            link.href = dataUrl;
+            link.click();
+        } catch (e) {
+            console.error("Failed to export page as image", e);
+            alert("Failed to export page as image. Make sure the page is fully rendered.");
+        }
     };
+
+    const handleAnalyzePage = async () => {
+        if (!currentCanvasRef.current) return;
+        setIsAnalyzing(true);
+        try {
+            const result = await OCRHandler.analyzeImage(currentCanvasRef.current);
+            setAnalyzedText(result);
+        } catch (e) {
+            console.error("OCR Error", e);
+            alert("Failed to analyze page text.");
+        } finally {
+            setIsAnalyzing(false);
+        }
+    };
+
+    const handleSignatureUpload = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+
+                // Background removal: make white/near-white pixels transparent
+                for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i];
+                    const g = data[i + 1];
+                    const b = data[i + 2];
+                    if (r > 200 && g > 200 && b > 200) {
+                        data[i + 3] = 0;
+                    }
+                }
+
+                ctx.putImageData(imageData, 0, 0);
+                setSignatureImage(canvas.toDataURL());
+                setCurrentDrawingTool('signature');
+            };
+            img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const handleClearPage = () => {
+        if (!currentCanvasRef.current) return;
+        const canvas = currentCanvasRef.current;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        saveToHistory();
+    };
+
+    // History Functions
+    const saveToHistory = useCallback(() => {
+        const canvas = currentCanvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+        const newHistory = history.slice(0, historyStep + 1);
+        newHistory.push(snapshot);
+
+        if (newHistory.length > 20) newHistory.shift();
+
+        setHistory(newHistory);
+        setHistoryStep(newHistory.length - 1);
+    }, [history, historyStep]);
+
+    const handleUndo = useCallback(() => {
+        if (historyStep > 0) {
+            const newStep = historyStep - 1;
+            setHistoryStep(newStep);
+            const canvas = currentCanvasRef.current;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear first for transparency
+            ctx.putImageData(history[newStep], 0, 0);
+        } else if (historyStep === 0) {
+            // Undo from first state (initial draw) back to totally clear
+            setHistoryStep(-1);
+            const canvas = currentCanvasRef.current;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+    }, [history, historyStep]);
+
+    const handleRedo = useCallback(() => {
+        if (historyStep < history.length - 1) {
+            const newStep = historyStep + 1;
+            setHistoryStep(newStep);
+            const canvas = currentCanvasRef.current;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.putImageData(history[newStep], 0, 0);
+        }
+    }, [history, historyStep]);
+
+    // Drawing Handlers
+    const startDrawing = useCallback((e) => {
+        if (!currentDrawingTool || !currentCanvasRef.current) return;
+
+        // Initialize history with empty state if needed
+        if (history.length === 0) {
+            const canvas = currentCanvasRef.current;
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            const initialSnapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            setHistory([initialSnapshot]);
+            setHistoryStep(0);
+        }
+
+        isDrawingRef.current = true;
+        const canvas = currentCanvasRef.current;
+        const rect = canvas.getBoundingClientRect();
+
+        // Handle both mouse and touch
+        const clientX = e.type.startsWith('touch') ? e.touches[0].clientX : e.clientX;
+        const clientY = e.type.startsWith('touch') ? e.touches[0].clientY : e.clientY;
+
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+
+        lastPosRef.current = {
+            x: (clientX - rect.left) * scaleX,
+            y: (clientY - rect.top) * scaleY
+        };
+
+        const ctx = canvas.getContext('2d');
+        
+        // For smooth marker: save state and start path
+        if (currentDrawingTool === 'marker') {
+            preStrokeCanvasStateRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            activeStrokeRef.current = [lastPosRef.current];
+        }
+
+        ctx.beginPath();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        if (currentDrawingTool === 'eraser') {
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.strokeStyle = 'rgba(0,0,0,1)';
+            ctx.lineWidth = eraserSize;
+            ctx.globalAlpha = 1.0;
+        } else if (currentDrawingTool === 'marker') {
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.strokeStyle = drawColor;
+            ctx.lineWidth = markerSize;
+            ctx.globalAlpha = 0.5;
+        } else if (currentDrawingTool === 'whiteout') {
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = whiteoutSize;
+            ctx.globalAlpha = 1.0;
+        } else if (currentDrawingTool === 'signature') {
+            if (signatureImage) {
+                const img = new Image();
+                img.onload = () => {
+                    const aspect = img.width / img.height;
+                    const width = signatureSize * 50;
+                    const height = width / aspect;
+                    ctx.drawImage(img, lastPosRef.current.x - width / 2, lastPosRef.current.y - height / 2, width, height);
+                    saveToHistory();
+                };
+                img.src = signatureImage;
+                isDrawingRef.current = false;
+                return;
+            }
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = signatureSize;
+            ctx.globalAlpha = 1.0;
+        }
+
+        ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y);
+        ctx.lineTo(lastPosRef.current.x, lastPosRef.current.y);
+        ctx.stroke();
+    }, [currentDrawingTool, history, drawColor, markerSize, eraserSize, signatureSize]);
+
+    const draw = useCallback((e) => {
+        if (!isDrawingRef.current || !currentDrawingTool || !currentCanvasRef.current) return;
+        const canvas = currentCanvasRef.current;
+        const ctx = canvas.getContext('2d');
+        const rect = canvas.getBoundingClientRect();
+
+        const clientX = e.type.startsWith('touch') ? e.touches[0].clientX : e.clientX;
+        const clientY = e.type.startsWith('touch') ? e.touches[0].clientY : e.clientY;
+
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+
+        const currentPos = {
+            x: (clientX - rect.left) * scaleX,
+            y: (clientY - rect.top) * scaleY
+        };
+
+        if (currentDrawingTool === 'marker' && preStrokeCanvasStateRef.current) {
+            // Smooth marker logic: restore state and redraw entire path
+            ctx.putImageData(preStrokeCanvasStateRef.current, 0, 0);
+            activeStrokeRef.current.push(currentPos);
+            
+            ctx.beginPath();
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.strokeStyle = drawColor;
+            ctx.lineWidth = markerSize;
+            ctx.globalAlpha = 0.5;
+            
+            ctx.moveTo(activeStrokeRef.current[0].x, activeStrokeRef.current[0].y);
+            for (let i = 1; i < activeStrokeRef.current.length; i++) {
+                ctx.lineTo(activeStrokeRef.current[i].x, activeStrokeRef.current[i].y);
+            }
+            ctx.stroke();
+        } else {
+            ctx.beginPath();
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            if (currentDrawingTool === 'eraser') {
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.strokeStyle = 'rgba(0,0,0,1)'; // Ensure stroke exists for erasing
+                ctx.lineWidth = eraserSize;
+                ctx.globalAlpha = 1.0;
+            } else if (currentDrawingTool === 'whiteout') {
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = whiteoutSize;
+                ctx.globalAlpha = 1.0;
+            } else if (currentDrawingTool === 'signature') {
+                // Signature is handled in startDrawing (stamp)
+                return;
+            }
+
+            ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y);
+            ctx.lineTo(currentPos.x, currentPos.y);
+            ctx.stroke();
+        }
+
+        lastPosRef.current = currentPos;
+
+        // Reset composite/alpha
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1.0;
+    }, [currentDrawingTool, drawColor, markerSize, eraserSize, signatureSize]);
+
+    const stopDrawing = useCallback(() => {
+        if (isDrawingRef.current) {
+            isDrawingRef.current = false;
+            saveToHistory();
+            activeStrokeRef.current = [];
+            preStrokeCanvasStateRef.current = null;
+        }
+    }, [saveToHistory]);
+
+    // Attach listeners
+    useEffect(() => {
+        const canvas = currentCanvasRef.current;
+        if (canvas) {
+            canvas.addEventListener('mousedown', startDrawing);
+            canvas.addEventListener('mousemove', draw);
+            window.addEventListener('mouseup', stopDrawing);
+            canvas.addEventListener('touchstart', startDrawing, { passive: false });
+            canvas.addEventListener('touchmove', draw, { passive: false });
+            window.addEventListener('touchend', stopDrawing);
+
+            return () => {
+                canvas.removeEventListener('mousedown', startDrawing);
+                canvas.removeEventListener('mousemove', draw);
+                window.removeEventListener('mouseup', stopDrawing);
+                canvas.removeEventListener('touchstart', startDrawing);
+                canvas.removeEventListener('touchmove', draw);
+                window.removeEventListener('touchend', stopDrawing);
+            };
+        }
+    }, [startDrawing, draw, stopDrawing, activePage, renderedFileUrl]); // Re-attach on page change as canvas might be new
 
     // Main View State
     const [viewMode, setViewMode] = useState('single'); // 'single', 'list' (grid)
 
     const tools = [
-        { id: 'style', icon: Palette, label: 'Style' },
         { id: 'edit', icon: Type, label: 'Edit' },
         { id: 'ai', icon: Sparkles, label: 'AI Magic' },
     ];
 
     const handlePageClick = useCallback((page) => {
         setActivePage(page);
+        setHistory([]);
+        setHistoryStep(-1);
     }, []);
 
     return (
@@ -314,69 +622,166 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
                                     className="space-y-4"
                                 >
 
-                                    {activeTool === 'style' && (
-                                        <div className="space-y-6">
-                                            <h3 className="text-xs font-bold text-brand-blue/40 uppercase tracking-widest pl-1">Appearance</h3>
-
-                                            {/* Font Selection */}
-                                            <div className="space-y-3">
-                                                <label className="text-xs text-brand-blue/60 pl-1">Handwriting Font</label>
-                                                <div className="grid grid-cols-1 gap-2">
-                                                    {HANDWRITING_FONTS.map(font => (
-                                                        <button
-                                                            key={font.id}
-                                                            onClick={() => setSelectedFont(font.id)}
-                                                            className={cn(
-                                                                "text-left px-4 py-3 rounded-xl border transition-all text-sm relative overflow-hidden",
-                                                                selectedFont === font.id
-                                                                    ? "bg-brand-red/10 border-brand-red text-white"
-                                                                    : "bg-white/5 border-transparent hover:bg-white/10 text-brand-blue/70"
-                                                            )}
-                                                            style={{ fontFamily: font.family }}
-                                                        >
-                                                            {font.name}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-
-                                            {/* Chaos Control */}
-                                            <div className="space-y-3">
-                                                <div className="flex justify-between px-1">
-                                                    <label className="text-xs text-brand-blue/60">Human Imperfection</label>
-                                                    <span className="text-xs text-brand-yellow font-mono">{chaosLevel}%</span>
-                                                </div>
-                                                <input
-                                                    type="range"
-                                                    min="0"
-                                                    max="100"
-                                                    value={chaosLevel}
-                                                    onChange={(e) => setChaosLevel(parseInt(e.target.value))}
-                                                    className="w-full accent-brand-red h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
-                                                />
-                                            </div>
-
-                                            {/* Live Preview */}
-                                            <div className="space-y-3">
-                                                <label className="text-xs text-brand-blue/60 pl-1">Live Preview</label>
-                                                <div className="bg-white rounded-xl p-2 h-24 flex items-center justify-center overflow-hidden border-4 border-white/5 shadow-inner">
-                                                    <canvas
-                                                        ref={previewCanvasRef}
-                                                        width={240}
-                                                        height={80}
-                                                        className="w-full h-full object-contain"
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-
                                     {activeTool === 'edit' && (
                                         <div className="space-y-6">
                                             <h3 className="text-xs font-bold text-brand-blue/40 uppercase tracking-widest pl-1">Document</h3>
                                             <div className="p-4 bg-white/5 rounded-2xl border border-white/5 flex flex-col items-center justify-center gap-2">
                                                 <div className="text-xs text-brand-blue/50">Total Pages</div>
                                                 <div className="text-3xl font-bold text-white font-['Outfit']">{pdfDoc?.getPageCount() || 0}</div>
+                                            </div>
+
+                                            <div className="space-y-4">
+                                                <div className="flex justify-between items-center">
+                                                    <h3 className="text-xs font-bold text-brand-blue/40 uppercase tracking-widest pl-1">Drawing Tools</h3>
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={handleUndo}
+                                                            disabled={historyStep <= 0}
+                                                            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-brand-blue/60 disabled:opacity-30 disabled:cursor-not-allowed"
+                                                            title="Undo"
+                                                        >
+                                                            <Undo2 size={16} />
+                                                        </button>
+                                                        <button
+                                                            onClick={handleRedo}
+                                                            disabled={historyStep >= history.length - 1}
+                                                            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-brand-blue/60 disabled:opacity-30 disabled:cursor-not-allowed"
+                                                            title="Redo"
+                                                        >
+                                                            <Redo2 size={16} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    {[
+                                                        { id: 'marker', icon: Highlighter, label: 'Marker' },
+                                                        { id: 'eraser', icon: Eraser, label: 'Eraser' },
+                                                        { id: 'signature', icon: PenTool, label: 'Signature' },
+                                                        { id: 'whiteout', icon: Square, label: 'Expunge' }
+                                                    ].map((tool) => (
+                                                        <button
+                                                            key={tool.id}
+                                                            onClick={() => {
+                                                                if (tool.id === 'signature' && !signatureImage) {
+                                                                    signatureInputRef.current?.click();
+                                                                } else {
+                                                                    setCurrentDrawingTool(currentDrawingTool === tool.id ? null : tool.id);
+                                                                }
+                                                            }}
+                                                            className={cn(
+                                                                "flex flex-col items-center gap-2 p-3 rounded-xl transition-all border",
+                                                                currentDrawingTool === tool.id
+                                                                    ? "bg-brand-red/20 border-brand-red text-white"
+                                                                    : "bg-white/5 border-transparent text-brand-blue/60 hover:bg-white/10"
+                                                            )}
+                                                        >
+                                                            <tool.icon size={20} />
+                                                            <span className="text-[10px] font-bold uppercase">{tool.label}</span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+
+                                                <input
+                                                    type="file"
+                                                    ref={signatureInputRef}
+                                                    className="hidden"
+                                                    accept="image/*"
+                                                    onChange={handleSignatureUpload}
+                                                />
+
+                                                <AnimatePresence mode="wait">
+                                                    {currentDrawingTool && (
+                                                        <motion.div
+                                                            initial={{ opacity: 0, height: 0 }}
+                                                            animate={{ opacity: 1, height: 'auto' }}
+                                                            exit={{ opacity: 0, height: 0 }}
+                                                            className="space-y-4 overflow-hidden pt-2"
+                                                        >
+                                                            {/* Size Slider */}
+                                                            <div className="space-y-3">
+                                                                <div className="flex justify-between items-center">
+                                                                    <span className="text-[10px] text-brand-blue/40 uppercase font-bold tracking-wider">Brush Size</span>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div 
+                                                                            className="rounded-full bg-brand-red/40 border border-brand-red/60"
+                                                                            style={{ 
+                                                                                width: `${Math.max(4, (currentDrawingTool === 'marker' ? markerSize : currentDrawingTool === 'eraser' ? eraserSize : currentDrawingTool === 'whiteout' ? whiteoutSize : signatureSize * 5) / 2)}px`,
+                                                                                height: `${Math.max(4, (currentDrawingTool === 'marker' ? markerSize : currentDrawingTool === 'eraser' ? eraserSize : currentDrawingTool === 'whiteout' ? whiteoutSize : signatureSize * 5) / 2)}px`
+                                                                            }}
+                                                                        />
+                                                                        <span className="text-xs font-mono font-bold text-brand-red min-w-[3ch] text-right">
+                                                                            {currentDrawingTool === 'marker' ? markerSize :
+                                                                                currentDrawingTool === 'eraser' ? eraserSize : 
+                                                                                currentDrawingTool === 'whiteout' ? whiteoutSize : signatureSize}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex items-center gap-3">
+                                                                    <span className="text-[10px] text-brand-blue/30 font-bold">MIN</span>
+                                                                    <input
+                                                                        type="range"
+                                                                        min={currentDrawingTool === 'signature' ? "1" : currentDrawingTool === 'marker' ? "1" : "5"}
+                                                                        max={currentDrawingTool === 'signature' ? "10" : currentDrawingTool === 'marker' ? "50" : "100"}
+                                                                        value={currentDrawingTool === 'marker' ? markerSize :
+                                                                            currentDrawingTool === 'eraser' ? eraserSize : 
+                                                                            currentDrawingTool === 'whiteout' ? whiteoutSize : signatureSize}
+                                                                        onChange={(e) => {
+                                                                            const val = parseInt(e.target.value);
+                                                                            if (currentDrawingTool === 'marker') setMarkerSize(val);
+                                                                            else if (currentDrawingTool === 'eraser') setEraserSize(val);
+                                                                            else if (currentDrawingTool === 'whiteout') setWhiteoutSize(val);
+                                                                            else if (currentDrawingTool === 'signature') setSignatureSize(val);
+                                                                        }}
+                                                                        className="flex-1 h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-brand-red"
+                                                                    />
+                                                                    <span className="text-[10px] text-brand-blue/30 font-bold">MAX</span>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Eraser Specific: Clear All */}
+                                                            {currentDrawingTool === 'eraser' && (
+                                                                <button
+                                                                    onClick={handleClearPage}
+                                                                    className="w-full py-2 px-3 bg-white/5 hover:bg-red-500/10 border border-white/10 hover:border-red-500/50 text-brand-blue/60 hover:text-red-500 rounded-lg text-[10px] font-bold uppercase transition-all flex items-center justify-center gap-2"
+                                                                >
+                                                                    <Trash2 size={14} />
+                                                                    Clear Entire Page
+                                                                </button>
+                                                            )}
+
+                                                            {/* Signature Specific: Change Image */}
+                                                            {currentDrawingTool === 'signature' && signatureImage && (
+                                                                <button
+                                                                    onClick={() => signatureInputRef.current?.click()}
+                                                                    className="w-full py-2 px-3 bg-white/5 hover:bg-brand-red/10 border border-white/10 hover:border-brand-red/50 text-brand-blue/60 hover:text-brand-red rounded-lg text-[10px] font-bold uppercase transition-all flex items-center justify-center gap-2"
+                                                                >
+                                                                    <ImageIcon size={14} />
+                                                                    Change Signature
+                                                                </button>
+                                                            )}
+
+                                                            {/* Color Picker for Marker */}
+                                                            {currentDrawingTool === 'marker' && (
+                                                                <div className="space-y-2">
+                                                                    <div className="text-[10px] text-brand-blue/40 uppercase font-bold tracking-wider">Color</div>
+                                                                    <div className="flex flex-wrap gap-2">
+                                                                        {['#ce0a3a', '#000000', '#0000ff', '#00ff00', '#ffff00', '#ff00ff', '#00ffff'].map(color => (
+                                                                            <button
+                                                                                key={color}
+                                                                                onClick={() => setDrawColor(color)}
+                                                                                className={cn(
+                                                                                    "w-6 h-6 rounded-full border-2 transition-all",
+                                                                                    drawColor === color ? "border-white scale-110 shadow-lg" : "border-transparent opacity-50 hover:opacity-100"
+                                                                                )}
+                                                                                style={{ backgroundColor: color }}
+                                                                            />
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
                                             </div>
 
                                             <button
@@ -399,6 +804,60 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
                                         </div>
                                     )}
 
+                                    {activeTool === 'ai' && (
+                                        <div className="space-y-6">
+                                            <h3 className="text-xs font-bold text-brand-blue/40 uppercase tracking-widest pl-1">AI Analysis</h3>
+
+                                            <button
+                                                onClick={handleAnalyzePage}
+                                                disabled={isAnalyzing}
+                                                className="w-full py-4 px-4 bg-gradient-to-r from-brand-red to-brand-pink hover:from-brand-pink hover:to-brand-red text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-brand-red/30 active:scale-95 flex flex-col items-center justify-center gap-2 relative overflow-hidden group"
+                                            >
+                                                {isAnalyzing ? (
+                                                    <>
+                                                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                        <span>Analyzing Page...</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Sparkles size={20} className="group-hover:animate-pulse" />
+                                                        <span>Analyze Current Page</span>
+                                                    </>
+                                                )}
+                                            </button>
+
+                                            <AnimatePresence>
+                                                {analyzedText && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, y: 10 }}
+                                                        animate={{ opacity: 1, y: 0 }}
+                                                        className="space-y-4"
+                                                    >
+                                                        <div className="p-4 bg-white/5 rounded-xl border border-white/10 space-y-2">
+                                                            <div className="text-[10px] text-brand-blue/40 uppercase font-bold tracking-wider">Detected Text</div>
+                                                            <div className="text-sm text-brand-blue/80 leading-relaxed font-['Inter'] line-clamp-6">
+                                                                {analyzedText.fullText}
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            <div className="p-3 bg-white/5 rounded-lg border border-white/5 text-center">
+                                                                <div className="text-[10px] text-brand-blue/40 uppercase font-bold">Words</div>
+                                                                <div className="text-xl font-bold text-white">{analyzedText.words.length}</div>
+                                                            </div>
+                                                            <div className="p-3 bg-white/5 rounded-lg border border-white/5 text-center">
+                                                                <div className="text-[10px] text-brand-blue/40 uppercase font-bold">Confidence</div>
+                                                                <div className="text-xl font-bold text-brand-red">
+                                                                    {Math.round(analyzedText.words.reduce((acc, w) => acc + w.confidence, 0) / (analyzedText.words.length || 1))}%
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
+                                    )}
+
                                 </motion.div>
                             </AnimatePresence>
                         )}
@@ -409,19 +868,8 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
             {/* Main Area (Gallery Layout) */}
             <div className="flex-1 flex flex-col h-full overflow-hidden relative">
 
-                {/* Top Bar inside Workspace */}
-                <div className="h-8 border-b border-brand-blue/10 flex justify-between items-center px-6 bg-brand-dark/50 shrink-0">
-                    <div className="flex items-center gap-2 opacity-70">
-                        <ImageIcon size={16} />
-                        <span className="text-sm font-medium">{file.name}</span>
-                        <span className="text-xs bg-brand-blue/10 px-2 py-0.5 rounded text-brand-blue/60">
-                            Page {activePage} of {pdfDoc?.getPageCount() || 0}
-                        </span>
-                    </div>
-                </div>
-
                 {/* Center: Active Page Preview */}
-                <div className="flex-1 bg-brand-dark/50 relative overflow-hidden flex flex-col items-center justify-center p-0 min-h-0">
+                <div className="flex-1 bg-brand-dark/50 relative overflow-hidden flex flex-col items-center justify-center p-0 min-h-0 -mt-4">
                     {/* Background Grid Pattern */}
                     <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#ceeffe 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
 
@@ -441,7 +889,7 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
                 {/* Bottom: Collapsible Thumbnail Drawer */}
                 <div
                     className="absolute bottom-6 left-0 right-0 z-40 group/drawer px-10"
-                    onMouseEnter={() => setIsBottomDrawerOpen(true)}
+                    onMouseEnter={() => !currentDrawingTool && setIsBottomDrawerOpen(true)}
                     onMouseLeave={() => setIsBottomDrawerOpen(false)}
                 >
                     {/* Hover Trigger Handle */}
@@ -463,7 +911,7 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
                                 <span className="text-[10px] text-brand-blue/40">Hover to reveal</span>
                             </div>
                         </div>
-                        
+
                         <div className="flex-1 relative flex items-center group/nav overflow-hidden">
                             {/* Navigation Buttons */}
                             <div className="absolute left-0 inset-y-0 flex items-center z-50 pl-2">
@@ -476,7 +924,7 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
                                 </button>
                             </div>
 
-                            <div 
+                            <div
                                 ref={thumbnailContainerRef}
                                 className="flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar px-8 py-4 flex items-center gap-4 scroll-smooth h-full"
                             >
