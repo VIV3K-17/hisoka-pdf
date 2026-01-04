@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useContext } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { pdfjs } from 'react-pdf';
 import {
@@ -29,8 +29,10 @@ import { OCRHandler } from '../features/ai/OCRHandler';
 
 import { PDFEditor } from '../features/pdf/PDFEditor';
 import { RightSidebar } from './RightSidebar';
+import { ThemeContext } from '../context/ThemeContext';
 
 export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
+    const { isDarkMode } = useContext(ThemeContext);
     const [activeTool, setActiveTool] = useState('edit'); // edit, ai
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
@@ -566,11 +568,17 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
     }, []);
 
     return (
-        <div className="flex h-full w-full overflow-hidden bg-brand-dark text-brand-blue">
+        <div className={cn(
+            "flex h-full w-full overflow-hidden transition-colors duration-500",
+            isDarkMode ? "bg-brand-dark text-brand-blue" : "bg-gray-50 text-gray-900"
+        )}>
             {/* Left Sidebar - Tools */}
             <motion.div
                 animate={{ width: isSidebarOpen ? 280 : 80 }}
-                className="h-full border-r border-brand-blue/10 bg-brand-dark flex flex-col relative transition-all duration-300 z-20"
+                className={cn(
+                    "h-full border-r flex flex-col relative transition-all duration-300 z-20",
+                    isDarkMode ? "border-brand-blue/10 bg-brand-dark" : "border-gray-200 bg-white/90 text-gray-800 backdrop-blur-sm"
+                )}
             >
                 <button
                     onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -624,20 +632,20 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
 
                                     {activeTool === 'edit' && (
                                         <div className="space-y-6">
-                                            <h3 className="text-xs font-bold text-brand-blue/40 uppercase tracking-widest pl-1">Document</h3>
-                                            <div className="p-4 bg-white/5 rounded-2xl border border-white/5 flex flex-col items-center justify-center gap-2">
-                                                <div className="text-xs text-brand-blue/50">Total Pages</div>
-                                                <div className="text-3xl font-bold text-white font-['Outfit']">{pdfDoc?.getPageCount() || 0}</div>
+                                            <h3 className={cn("text-xs font-bold uppercase tracking-widest pl-1", isDarkMode ? "text-brand-blue/40" : "text-gray-500")}>Document</h3>
+                                            <div className={cn("p-4 rounded-2xl border flex flex-col items-center justify-center gap-2", isDarkMode ? "bg-white/5 border-white/5" : "bg-gray-100 border-gray-200")}>
+                                                <div className={cn("text-xs", isDarkMode ? "text-brand-blue/50" : "text-gray-500")}>Total Pages</div>
+                                                <div className={cn("text-3xl font-bold font-['Outfit']", isDarkMode ? "text-white" : "text-gray-900")}>{pdfDoc?.getPageCount() || 0}</div>
                                             </div>
 
                                             <div className="space-y-4">
-                                                <div className="flex justify-between items-center">
-                                                    <h3 className="text-xs font-bold text-brand-blue/40 uppercase tracking-widest pl-1">Drawing Tools</h3>
+                                                <div className={cn("flex justify-between items-center pb-2 border-b", isDarkMode ? "border-white/10" : "border-gray-200")}>
+                                                    <h3 className={cn("text-xs font-bold uppercase tracking-widest pl-1", isDarkMode ? "text-brand-blue/40" : "text-gray-500")}>Drawing Tools</h3>
                                                     <div className="flex gap-2">
                                                         <button
                                                             onClick={handleUndo}
                                                             disabled={historyStep <= 0}
-                                                            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-brand-blue/60 disabled:opacity-30 disabled:cursor-not-allowed"
+                                                            className={cn("p-1.5 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed", isDarkMode ? "bg-white/5 hover:bg-white/10 text-brand-blue/60" : "bg-gray-100 hover:bg-gray-200 text-gray-600")}
                                                             title="Undo"
                                                         >
                                                             <Undo2 size={16} />
@@ -645,7 +653,7 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
                                                         <button
                                                             onClick={handleRedo}
                                                             disabled={historyStep >= history.length - 1}
-                                                            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-brand-blue/60 disabled:opacity-30 disabled:cursor-not-allowed"
+                                                            className={cn("p-1.5 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed", isDarkMode ? "bg-white/5 hover:bg-white/10 text-brand-blue/60" : "bg-gray-100 hover:bg-gray-200 text-gray-600")}
                                                             title="Redo"
                                                         >
                                                             <Redo2 size={16} />
@@ -672,7 +680,9 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
                                                                 "flex flex-col items-center gap-2 p-3 rounded-xl transition-all border",
                                                                 currentDrawingTool === tool.id
                                                                     ? "bg-brand-red/20 border-brand-red text-white"
-                                                                    : "bg-white/5 border-transparent text-brand-blue/60 hover:bg-white/10"
+                                                                    : isDarkMode 
+                                                                        ? "bg-white/5 border-transparent text-brand-blue/60 hover:bg-white/10"
+                                                                        : "bg-gray-100 border-gray-200 text-gray-600 hover:bg-gray-200"
                                                             )}
                                                         >
                                                             <tool.icon size={20} />
@@ -698,9 +708,9 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
                                                             className="space-y-4 overflow-hidden pt-2"
                                                         >
                                                             {/* Size Slider */}
-                                                            <div className="space-y-3">
+                                                            <div className={cn("space-y-3 p-3 rounded-xl", isDarkMode ? "bg-white/5" : "bg-gray-100 border border-gray-200")}>
                                                                 <div className="flex justify-between items-center">
-                                                                    <span className="text-[10px] text-brand-blue/40 uppercase font-bold tracking-wider">Brush Size</span>
+                                                                    <span className={cn("text-[10px] uppercase font-bold tracking-wider", isDarkMode ? "text-brand-blue/40" : "text-gray-500")}>Brush Size</span>
                                                                     <div className="flex items-center gap-2">
                                                                         <div 
                                                                             className="rounded-full bg-brand-red/40 border border-brand-red/60"
@@ -717,7 +727,7 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
                                                                     </div>
                                                                 </div>
                                                                 <div className="flex items-center gap-3">
-                                                                    <span className="text-[10px] text-brand-blue/30 font-bold">MIN</span>
+                                                                    <span className={cn("text-[10px] font-bold", isDarkMode ? "text-brand-blue/30" : "text-gray-400")}>MIN</span>
                                                                     <input
                                                                         type="range"
                                                                         min={currentDrawingTool === 'signature' ? "1" : currentDrawingTool === 'marker' ? "1" : "5"}
@@ -732,9 +742,9 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
                                                                             else if (currentDrawingTool === 'whiteout') setWhiteoutSize(val);
                                                                             else if (currentDrawingTool === 'signature') setSignatureSize(val);
                                                                         }}
-                                                                        className="flex-1 h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-brand-red"
+                                                                        className={cn("flex-1 h-1.5 rounded-lg appearance-none cursor-pointer accent-brand-red", isDarkMode ? "bg-white/10" : "bg-gray-300")}
                                                                     />
-                                                                    <span className="text-[10px] text-brand-blue/30 font-bold">MAX</span>
+                                                                    <span className={cn("text-[10px] font-bold", isDarkMode ? "text-brand-blue/30" : "text-gray-400")}>MAX</span>
                                                                 </div>
                                                             </div>
 
@@ -742,7 +752,7 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
                                                             {currentDrawingTool === 'eraser' && (
                                                                 <button
                                                                     onClick={handleClearPage}
-                                                                    className="w-full py-2 px-3 bg-white/5 hover:bg-red-500/10 border border-white/10 hover:border-red-500/50 text-brand-blue/60 hover:text-red-500 rounded-lg text-[10px] font-bold uppercase transition-all flex items-center justify-center gap-2"
+                                                                    className={cn("w-full py-2 px-3 border rounded-lg text-[10px] font-bold uppercase transition-all flex items-center justify-center gap-2", isDarkMode ? "bg-white/5 hover:bg-red-500/10 border-white/10 hover:border-red-500/50 text-brand-blue/60 hover:text-red-500" : "bg-gray-100 hover:bg-red-50 border-gray-200 hover:border-red-300 text-gray-600 hover:text-red-500")}
                                                                 >
                                                                     <Trash2 size={14} />
                                                                     Clear Entire Page
@@ -753,7 +763,7 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
                                                             {currentDrawingTool === 'signature' && signatureImage && (
                                                                 <button
                                                                     onClick={() => signatureInputRef.current?.click()}
-                                                                    className="w-full py-2 px-3 bg-white/5 hover:bg-brand-red/10 border border-white/10 hover:border-brand-red/50 text-brand-blue/60 hover:text-brand-red rounded-lg text-[10px] font-bold uppercase transition-all flex items-center justify-center gap-2"
+                                                                    className={cn("w-full py-2 px-3 border rounded-lg text-[10px] font-bold uppercase transition-all flex items-center justify-center gap-2", isDarkMode ? "bg-white/5 hover:bg-brand-red/10 border-white/10 hover:border-brand-red/50 text-brand-blue/60 hover:text-brand-red" : "bg-gray-100 hover:bg-red-50 border-gray-200 hover:border-brand-red/50 text-gray-600 hover:text-brand-red")}
                                                                 >
                                                                     <ImageIcon size={14} />
                                                                     Change Signature
@@ -762,8 +772,8 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
 
                                                             {/* Color Picker for Marker */}
                                                             {currentDrawingTool === 'marker' && (
-                                                                <div className="space-y-2">
-                                                                    <div className="text-[10px] text-brand-blue/40 uppercase font-bold tracking-wider">Color</div>
+                                                                <div className={cn("space-y-2 p-3 rounded-xl", isDarkMode ? "bg-white/5" : "bg-gray-100 border border-gray-200")}>
+                                                                    <div className={cn("text-[10px] uppercase font-bold tracking-wider", isDarkMode ? "text-brand-blue/40" : "text-gray-500")}>Color</div>
                                                                     <div className="flex flex-wrap gap-2">
                                                                         {['#ce0a3a', '#000000', '#0000ff', '#00ff00', '#ffff00', '#ff00ff', '#00ffff'].map(color => (
                                                                             <button
@@ -843,7 +853,7 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
                                                         <div className="grid grid-cols-2 gap-2">
                                                             <div className="p-3 bg-white/5 rounded-lg border border-white/5 text-center">
                                                                 <div className="text-[10px] text-brand-blue/40 uppercase font-bold">Words</div>
-                                                                <div className="text-xl font-bold text-white">{analyzedText.words.length}</div>
+                                                                <div className={cn("text-xl font-bold", isDarkMode ? "text-white" : "text-gray-900")}>{analyzedText.words.length}</div>
                                                             </div>
                                                             <div className="p-3 bg-white/5 rounded-lg border border-white/5 text-center">
                                                                 <div className="text-[10px] text-brand-blue/40 uppercase font-bold">Confidence</div>
@@ -918,7 +928,10 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
                                 <button
                                     onClick={() => navigatePage('prev')}
                                     disabled={activePage === 1}
-                                    className="p-2 bg-brand-dark/90 border border-white/10 rounded-full text-white/40 hover:text-white hover:bg-brand-red hover:border-brand-red transition-all shadow-xl backdrop-blur-md opacity-0 group-hover/nav:opacity-100 translate-x-[-10px] group-hover/nav:translate-x-0 disabled:hidden"
+                                    className={cn(
+                                        "p-2 bg-brand-dark/90 border border-white/10 rounded-full hover:bg-brand-red hover:border-brand-red transition-all shadow-xl backdrop-blur-md opacity-0 group-hover/nav:opacity-100 translate-x-[-10px] group-hover/nav:translate-x-0 disabled:hidden",
+                                        isDarkMode ? "text-white/40 hover:text-white" : "text-gray-500 hover:text-white"
+                                    )}
                                 >
                                     <ChevronLeft size={20} />
                                 </button>
@@ -943,7 +956,10 @@ export const EditorWorkspace = ({ file, pdfDoc, setPdfDoc }) => {
                                 <button
                                     onClick={() => navigatePage('next')}
                                     disabled={activePage === (pdfDoc?.getPageCount() || 0)}
-                                    className="p-2 bg-brand-dark/90 border border-white/10 rounded-full text-white/40 hover:text-white hover:bg-brand-red hover:border-brand-red transition-all shadow-xl backdrop-blur-md opacity-0 group-hover/nav:opacity-100 translate-x-[10px] group-hover/nav:translate-x-0 disabled:hidden"
+                                    className={cn(
+                                        "p-2 bg-brand-dark/90 border border-white/10 rounded-full hover:bg-brand-red hover:border-brand-red transition-all shadow-xl backdrop-blur-md opacity-0 group-hover/nav:opacity-100 translate-x-[10px] group-hover/nav:translate-x-0 disabled:hidden",
+                                        isDarkMode ? "text-white/40 hover:text-white" : "text-gray-500 hover:text-white"
+                                    )}
                                 >
                                     <ChevronRight size={20} />
                                 </button>

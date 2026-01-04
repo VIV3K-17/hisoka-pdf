@@ -1,10 +1,38 @@
-import React from 'react';
-import { motion } from 'framer-motion';
-import { FileText, Home, Settings, HelpCircle, Layers } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { FileText, Settings, SlidersHorizontal, SunMedium, Moon, UserRound } from 'lucide-react';
+import { ThemeContext } from '../context/ThemeContext';
 
 export const Layout = ({ children }) => {
+    const [isDarkMode, setIsDarkMode] = useState(true);
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const menuRef = useRef(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (menuRef.current && !menuRef.current.contains(event.target)) {
+                setIsMenuOpen(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    useEffect(() => {
+        document.documentElement.dataset.theme = isDarkMode ? 'dark' : 'light';
+    }, [isDarkMode]);
+
+    const toggleTheme = () => setIsDarkMode(prev => !prev);
+    const handleNavClick = (destination) => {
+        alert(`${destination} section coming soon!`);
+    };
+
+    const navButtonBase = 'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all';
+
     return (
-        <div className="min-h-screen w-full bg-brand-dark text-brand-blue relative overflow-hidden flex flex-col">
+        <ThemeContext.Provider value={{ isDarkMode, toggleTheme }}>
+            <div className={`min-h-screen w-full relative overflow-hidden flex flex-col transition-colors duration-500 ${isDarkMode ? 'bg-brand-dark text-brand-blue' : 'bg-white text-gray-900'}`}>
             {/* Ambient Background Glows */}
             <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
                 <motion.div
@@ -20,35 +48,87 @@ export const Layout = ({ children }) => {
             </div>
 
             {/* Header */}
-            <header className="w-full h-16 border-b border-brand-blue/10 bg-brand-dark/80 backdrop-blur-md sticky top-0 z-50 flex items-center justify-between px-6">
-                <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-red to-brand-pink flex items-center justify-center shadow-lg shadow-brand-red/20">
-                        <FileText size={18} className="text-white" />
+            <header className={`w-full h-16 border-b backdrop-blur-md sticky top-0 z-50 flex items-center justify-between px-6 transition-colors duration-500 ${isDarkMode ? 'border-brand-blue/10 bg-brand-dark/80 text-white' : 'border-gray-200 bg-white/80 text-gray-900'}`}>
+                <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-brand-red to-brand-pink flex items-center justify-center shadow-lg shadow-brand-red/20">
+                        <FileText size={22} className="text-white" />
                     </div>
-                    <span className="text-xl font-bold font-['Outfit'] tracking-wide text-white">
+                    <span className={`text-2xl font-bold font-['Outfit'] tracking-wide ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
                         Hisoka PDF
                     </span>
                 </div>
 
-                <nav className="hidden md:flex items-center gap-1">
-                    {[
-                        { name: 'Dashboard', icon: Home },
-                        { name: 'Features', icon: Layers },
-                        { name: 'Settings', icon: Settings },
-                        { name: 'Help', icon: HelpCircle }
-                    ].map((item) => (
-                        <button
-                            key={item.name}
-                            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-brand-blue/70 hover:text-brand-yellow hover:bg-white/5 transition-all"
-                        >
-                            <item.icon size={16} />
-                            {item.name}
-                        </button>
-                    ))}
-                </nav>
+                <div className="ml-auto flex items-center gap-3">
+                    <button
+                        type="button"
+                        onClick={() => handleNavClick('Other Tools')}
+                        className={`${navButtonBase} ${isDarkMode ? 'text-brand-yellow bg-white/5 hover:bg-white/10' : 'text-white bg-gradient-to-r from-brand-red to-brand-pink hover:opacity-90'}`}
+                    >
+                        <SlidersHorizontal size={16} />
+                        Other Tools
+                    </button>
 
-                <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-[#ceeffe]/10 border border-[#ceeffe]/20" />
+                    <div className="relative" ref={menuRef}>
+                        <button
+                            type="button"
+                            onClick={() => setIsMenuOpen(prev => !prev)}
+                            className={`w-10 h-10 rounded-full border flex items-center justify-center transition-all duration-300 shadow-lg overflow-hidden ${isDarkMode ? 'bg-brand-dark border-white/10 hover:border-white/40' : 'bg-white border-gray-200 hover:border-gray-400'}`}
+                            aria-haspopup="true"
+                            aria-expanded={isMenuOpen}
+                            aria-label="User profile menu"
+                        >
+                            <span className={`text-sm font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                                VS
+                            </span>
+                        </button>
+
+                        <AnimatePresence>
+                            {isMenuOpen && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -5 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -5 }}
+                                    className={`absolute right-0 top-12 w-60 rounded-2xl border shadow-2xl backdrop-blur-xl p-3 flex flex-col gap-2 ${isDarkMode ? 'bg-brand-dark/95 border-white/10' : 'bg-white border-gray-200'}`}
+                                >
+                                    <div className={`flex items-center gap-3 p-3 rounded-xl ${isDarkMode ? 'bg-white/5' : 'bg-gray-100'}`}>
+                                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-brand-red to-brand-pink flex items-center justify-center shadow-lg text-white">
+                                            <UserRound size={20} />
+                                        </div>
+                                        <div>
+                                            <p className={`text-sm font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Vivek Sesetti</p>
+                                            <p className={`text-xs ${isDarkMode ? 'text-brand-blue/70' : 'text-gray-500'}`}>Lead Editor</p>
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => handleNavClick('Settings')}
+                                        className={`flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium ${isDarkMode ? 'text-white hover:bg-white/5' : 'text-gray-700 hover:bg-gray-100'}`}
+                                    >
+                                        <Settings size={16} />
+                                        Settings
+                                    </button>
+
+                                    <div className={`rounded-xl px-3 py-3 flex items-center justify-between ${isDarkMode ? 'bg-white/5 text-white' : 'bg-gray-100 text-gray-800'}`}>
+                                        <div>
+                                            <p className="text-xs uppercase tracking-wider font-semibold">Appearance</p>
+                                            <p className="text-sm mt-1">{isDarkMode ? 'Dark Mode' : 'Light Mode'}</p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={toggleTheme}
+                                            className={`w-14 h-7 rounded-full relative transition-colors ${isDarkMode ? 'bg-brand-red/80' : 'bg-brand-pink/70'}`}
+                                            aria-pressed={!isDarkMode}
+                                        >
+                                            <span
+                                                className={`absolute top-0.5 w-6 h-6 rounded-full bg-white shadow-md transition-all duration-300 ${isDarkMode ? 'left-7' : 'left-0.5'}`}
+                                            />
+                                        </button>
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
                 </div>
             </header>
 
@@ -60,6 +140,7 @@ export const Layout = ({ children }) => {
             >
                 {children}
             </motion.main>
-        </div>
+            </div>
+        </ThemeContext.Provider>
     );
 };
