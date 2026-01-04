@@ -24,7 +24,6 @@ export const RightSidebar = ({
     activeTool
 }) => {
     const tools = [
-        { id: 'organize', icon: Grid, label: 'Organize PDF' },
         { id: 'image-to-pdf', icon: ImageIcon, label: 'Image to PDF' },
         { id: 'pdf-to-image', icon: FileType, label: 'PDF to Image' },
         { id: 'split', icon: Scissors, label: 'Split PDF' },

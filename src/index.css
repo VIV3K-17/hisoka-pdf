@@ -3,6 +3,49 @@
 @import "tailwindcss";
 @config "../tailwind.config.js";
 
+/* Custom Handwriting Fonts */
+@font-face {
+  font-family: 'Braden Hill';
+  src: url('/fonts/QEBradenHill.ttf') format('truetype');
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Caroline';
+  src: url('/fonts/QECarolineMutiboko.ttf') format('truetype');
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Donald Ross';
+  src: url('/fonts/QEDonaldRoss.ttf') format('truetype');
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Sam Roberts';
+  src: url('/fonts/QESamRoberts2.ttf') format('truetype');
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Scott Williams';
+  src: url('/fonts/QEScottWilliams.ttf') format('truetype');
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Tony Flores';
+  src: url('/fonts/QETonyFlores.ttf') format('truetype');
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Victor Read';
+  src: url('/fonts/QEVRead.ttf') format('truetype');
+  font-display: swap;
+}
+
 :root {
   --page-bg: #140f22;
   --text-primary: #ceeffe;
